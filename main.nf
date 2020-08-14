@@ -130,5 +130,44 @@ process gwas_2_spa_tests {
   """
 }
 
-// TODO: Post-GWAS filtering
-// TODO: Creation of post-GRM plink files (bcftools) - only needs to be run once
+/*--------------------------------------------------
+  GWAS Analysis 2 with SAIGE - Generate report
+---------------------------------------------------*/
+
+process create_report {
+  tag "report"
+  publishDir "${params.outdir}/MultiQC/", mode: 'copy'
+
+  input:
+  file(saige_output) from ch_report.collect()
+  file(gwas_cat) from ch_gwas_cat
+
+  output:
+  file "multiqc_report.html" into ch_report_outputs
+  file "*" into ch_report_outputs_all
+
+  script:
+  """
+  # creates analysis.csv
+  concat_chroms.R
+
+  mv analysis.csv /opt/bin
+  cp $gwas_cat gwas_cat.csv
+  mv  gwas_cat.csv /opt/bin
+
+  cd /opt/bin
+
+  # creates gwascat_subset.csv
+  ./subset_gwascat.R
+
+  # creates covid_1_manhattan.png with analysis.csv as input
+  ./manhattan.R --saige_output='analysis.csv' --output_tag='covid1'
+
+  R -e "rmarkdown::render('gwas_report.Rmd', params = list(manhattan='covid_1_manhattan.png',gwascat='gwascat_subset.csv',output_file='multiqc_report.html')"
+
+  jupytext --to ipynb gwas_report.Rmd
+
+  mv multiqc_report.html ..
+  mv gwas_report.ipynb ..
+  """
+}
